@@ -543,7 +543,7 @@ namespace cryptonote
     res.mainnet = net_type == MAINNET;
     res.testnet = net_type == TESTNET;
     res.stagenet = net_type == STAGENET;
-    res.nettype = net_type == MAINNET ? "mainnet" : net_type == TESTNET ? "testnet" : net_type == STAGENET ? "stagenet" : "fakechain";
+    res.nettype = net_type == MAINNET ? "mainnet" : net_type == TESTNET ? "testnet" : net_type == STAGENET ? "stagenet" : net_type == DEVNET ? "devnet" : "fakechain";
     store_difficulty(m_core.get_blockchain_storage().get_db().get_block_cumulative_difficulty(res.height - 1),
         res.cumulative_difficulty, res.wide_cumulative_difficulty, res.cumulative_difficulty_top64);
     res.block_size_limit = res.block_weight_limit = m_core.get_blockchain_storage().get_current_cumulative_block_weight_limit();

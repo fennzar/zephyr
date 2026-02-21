@@ -1,0 +1,9 @@
+{
+  "daemon": { "host": "127.0.0.1", "port": 47767 },
+  "oracle": { "host": "127.0.0.1", "port": 5555 },
+  "wallets": {
+    "gov":   { "port": 48769, "description": "Governance wallet" },
+    "miner": { "port": 48767, "description": "Miner wallet" },
+    "test":  { "port": 48768, "description": "Test wallet" }
+  }
+}

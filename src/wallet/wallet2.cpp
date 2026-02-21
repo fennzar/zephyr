@@ -256,6 +256,7 @@ struct options {
   const command_line::arg_descriptor<bool> daemon_ssl_allow_chained = {"daemon-ssl-allow-chained", tools::wallet2::tr("Allow user (via --daemon-ssl-ca-certificates) chain certificates"), false};
   const command_line::arg_descriptor<bool> testnet = {"testnet", tools::wallet2::tr("For testnet. Daemon must also be launched with --testnet flag"), false};
   const command_line::arg_descriptor<bool> stagenet = {"stagenet", tools::wallet2::tr("For stagenet. Daemon must also be launched with --stagenet flag"), false};
+  const command_line::arg_descriptor<bool> devnet = {"devnet", tools::wallet2::tr("For devnet. Daemon must also be launched with --devnet flag"), false};
   const command_line::arg_descriptor<std::string, false, true, 2> shared_ringdb_dir = {
     "shared-ringdb-dir", tools::wallet2::tr("Set shared ring database path"),
     get_default_ringdb_path(),
@@ -319,7 +320,8 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
 {
   const bool testnet = command_line::get_arg(vm, opts.testnet);
   const bool stagenet = command_line::get_arg(vm, opts.stagenet);
-  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+  const bool devnet = command_line::get_arg(vm, opts.devnet);
+  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : devnet ? DEVNET : MAINNET;
   const uint64_t kdf_rounds = command_line::get_arg(vm, opts.kdf_rounds);
   THROW_WALLET_EXCEPTION_IF(kdf_rounds == 0, tools::error::wallet_internal_error, "KDF rounds must not be 0");
 
@@ -535,7 +537,8 @@ std::pair<std::unique_ptr<tools::wallet2>, tools::password_container> generate_f
 {
   const bool testnet = command_line::get_arg(vm, opts.testnet);
   const bool stagenet = command_line::get_arg(vm, opts.stagenet);
-  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+  const bool devnet = command_line::get_arg(vm, opts.devnet);
+  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : devnet ? DEVNET : MAINNET;
 
   /* GET_FIELD_FROM_JSON_RETURN_ON_ERROR Is a generic macro that can return
   false. Gcc will coerce this into unique_ptr(nullptr), but clang correctly
@@ -1248,6 +1251,11 @@ bool wallet2::has_stagenet_option(const boost::program_options::variables_map& v
   return command_line::get_arg(vm, options().stagenet);
 }
 
+bool wallet2::has_devnet_option(const boost::program_options::variables_map& vm)
+{
+  return command_line::get_arg(vm, options().devnet);
+}
+
 bool wallet2::has_proxy_option() const
 {
   return !m_proxy.empty();
@@ -1284,6 +1292,7 @@ void wallet2::init_options(boost::program_options::options_description& desc_par
   command_line::add_arg(desc_params, opts.daemon_ssl_allow_chained);
   command_line::add_arg(desc_params, opts.testnet);
   command_line::add_arg(desc_params, opts.stagenet);
+  command_line::add_arg(desc_params, opts.devnet);
   command_line::add_arg(desc_params, opts.shared_ringdb_dir);
   command_line::add_arg(desc_params, opts.kdf_rounds);
   mms::message_store::init_options(desc_params);
@@ -3466,9 +3475,9 @@ void wallet2::refresh(bool trusted_daemon, uint64_t start_height, uint64_t & blo
 void check_block_hard_fork_version(cryptonote::network_type nettype, uint8_t hf_version, uint64_t height, bool &wallet_is_outdated, bool &daemon_is_outdated)
 {
   const size_t wallet_num_hard_forks = nettype == TESTNET ? num_testnet_hard_forks
-    : nettype == STAGENET ? num_stagenet_hard_forks : num_mainnet_hard_forks;
+    : nettype == STAGENET ? num_stagenet_hard_forks : nettype == DEVNET ? num_devnet_hard_forks : num_mainnet_hard_forks;
   const hardfork_t *wallet_hard_forks = nettype == TESTNET ? testnet_hard_forks
-    : nettype == STAGENET ? stagenet_hard_forks : mainnet_hard_forks;
+    : nettype == STAGENET ? stagenet_hard_forks : nettype == DEVNET ? devnet_hard_forks : mainnet_hard_forks;
 
   wallet_is_outdated = hf_version > wallet_hard_forks[wallet_num_hard_forks-1].version;
   if (wallet_is_outdated)
@@ -4306,9 +4315,9 @@ bool wallet2::get_rct_distribution(const std::string rct_asset_type, uint64_t &s
   req.amounts.push_back(0);
 
   if (rct_asset_type == "ZYIELD")
-    req.from_height = YIELD_FORK_HEIGHT;
+    req.from_height = get_config(m_nettype).YIELD_HEIGHT;
   else if (rct_asset_type == "ZPH" || rct_asset_type == "ZSD" || rct_asset_type == "ZRS" || rct_asset_type == "ZYS")
-    req.from_height = AUDIT_FORK_HEIGHT;
+    req.from_height = get_config(m_nettype).AUDIT_HEIGHT;
   else
     req.from_height = 0;
 
@@ -5041,7 +5050,7 @@ bool wallet2::load_keys_buf(const std::string& keys_buf, const epee::wipeable_st
     THROW_WALLET_EXCEPTION_IF(static_cast<uint8_t>(m_nettype) != field_nettype, error::wallet_internal_error,
     (boost::format("%s wallet cannot be opened as %s wallet")
     % (field_nettype == 0 ? "Mainnet" : field_nettype == 1 ? "Testnet" : "Stagenet")
-    % (m_nettype == MAINNET ? "mainnet" : m_nettype == TESTNET ? "testnet" : "stagenet")).str());
+    % (m_nettype == MAINNET ? "mainnet" : m_nettype == TESTNET ? "testnet" : m_nettype == DEVNET ? "devnet" : "stagenet")).str());
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, segregate_pre_fork_outputs, int, Int, false, true);
     m_segregate_pre_fork_outputs = field_segregate_pre_fork_outputs;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, key_reuse_mitigation2, int, Int, false, true);
@@ -8252,12 +8261,12 @@ int wallet2::get_fee_algorithm()
 //------------------------------------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_min_ring_size()
 {
-  return 16;
+  return m_nettype == cryptonote::DEVNET ? 2 : 16;
 }
 //------------------------------------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_max_ring_size()
 {
-  return 16;
+  return m_nettype == cryptonote::DEVNET ? 2 : 16;
 }
 //------------------------------------------------------------------------------------------------------------------------------
 uint64_t wallet2::adjust_mixin(uint64_t mixin)
@@ -14907,7 +14916,7 @@ uint64_t wallet2::get_segregation_fork_height() const
 {
   if (m_nettype == TESTNET)
     return TESTNET_SEGREGATION_FORK_HEIGHT;
-  if (m_nettype == STAGENET)
+  if (m_nettype == STAGENET || m_nettype == DEVNET)
     return STAGENET_SEGREGATION_FORK_HEIGHT;
   THROW_WALLET_EXCEPTION_IF(m_nettype != MAINNET, tools::error::wallet_internal_error, "Invalid network type");
 

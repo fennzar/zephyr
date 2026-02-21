@@ -4306,12 +4306,13 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
 
   const bool testnet = tools::wallet2::has_testnet_option(vm);
   const bool stagenet = tools::wallet2::has_stagenet_option(vm);
-  if (testnet && stagenet)
+  const bool devnet = tools::wallet2::has_devnet_option(vm);
+  if (testnet + stagenet + devnet > 1)
   {
-    fail_msg_writer() << tr("Can't specify more than one of --testnet and --stagenet");
+    fail_msg_writer() << tr("Can't specify more than one of --testnet, --stagenet and --devnet");
     return false;
   }
-  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+  const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : devnet ? DEVNET : MAINNET;
 
   epee::wipeable_string multisig_keys;
   epee::wipeable_string password;
@@ -6659,7 +6660,8 @@ void simple_wallet::check_for_inactivity_lock(bool user)
         tools::msg_writer() << tr("Filename: ") << m_wallet->get_wallet_file();
         tools::msg_writer() << tr("Network type: ") << (
           m_wallet->nettype() == cryptonote::TESTNET ? tr("Testnet") :
-          m_wallet->nettype() == cryptonote::STAGENET ? tr("Stagenet") : tr("Mainnet")
+          m_wallet->nettype() == cryptonote::STAGENET ? tr("Stagenet") :
+          m_wallet->nettype() == cryptonote::DEVNET ? tr("Devnet") : tr("Mainnet")
         );
       }
       try
@@ -10501,7 +10503,8 @@ bool simple_wallet::wallet_info(const std::vector<std::string> &args)
   message_writer() << tr("Type: ") << type;
   message_writer() << tr("Network type: ") << (
     m_wallet->nettype() == cryptonote::TESTNET ? tr("Testnet") :
-    m_wallet->nettype() == cryptonote::STAGENET ? tr("Stagenet") : tr("Mainnet"));
+    m_wallet->nettype() == cryptonote::STAGENET ? tr("Stagenet") :
+    m_wallet->nettype() == cryptonote::DEVNET ? tr("Devnet") : tr("Mainnet"));
   return true;
 }
 //----------------------------------------------------------------------------------------------------

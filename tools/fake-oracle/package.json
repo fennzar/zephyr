@@ -1,0 +1,10 @@
+{
+  "name": "zephyr-fake-oracle",
+  "version": "1.0.0",
+  "description": "Fake oracle server for Zephyr DEVNET",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

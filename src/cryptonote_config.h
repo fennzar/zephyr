@@ -185,6 +185,8 @@
 #define AUDIT_FORK_HEIGHT                       481500
 #define HF_VERSION_V11_FORK_HEIGHT              536000
 
+// DEVNET overrides these via config_t; macros are for mainnet/testnet/stagenet only
+
 #define UNAUDITABLE_ZEPH_AMOUNT                ((uint64_t)1921650000000000000) // 1921650.000000000000 ZEPH
 
 #define PER_KB_FEE_QUANTIZATION_DECIMALS        8
@@ -323,6 +325,38 @@ namespace config
       "681dPqESb8CCZrckTyd3O0xGegU8dVIFUWM8mzylv09zlgrzigkfedECAwEAAQ==\n"
       "-----END PUBLIC KEY-----\n";
     }
+
+  namespace devnet
+  {
+    uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 0x32ce41; // reuse stagenet ZPHS prefix
+    uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x6cef28e41; // reuse stagenet
+    uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 0xedf4e41; // reuse stagenet
+    uint16_t const P2P_DEFAULT_PORT = 47766;
+    uint16_t const RPC_DEFAULT_PORT = 47767;
+    uint16_t const ZMQ_RPC_DEFAULT_PORT = 47768;
+    boost::uuids::uuid const NETWORK_ID = { {
+        0x12 ,0x20, 0xF1, 0x73 , 0x63, 0x02 , 0x44, 0x61, 0x17, 0x31, 0x00, 0x82, 0x16, 0xB1, 0xB2, 0x13
+      } };
+    std::string const GENESIS_TX = "023c01ff00018080c89d9deb96f80602cb168051e11f7c09388a2cbbf536c4e3bf9b59cf7dd9ba33986ad45b6870cbeb045a45504833210176e9c35428a7b35b25c6d34b8ab963843d19d932c80b197589d6b33323fece4300000000";
+    uint32_t const GENESIS_NONCE = 10003;
+
+    // Governance wallet with known keys for devnet testing
+    // Spend key: dcf91a5b3e9913e0b78aa9460636f61ac9df37bbb003d795a555553214c83e09
+    // View key:  0ad41f7f73ee411387fbcf722364db676022f08c54fa4bb4708b6eec8c6b1a00
+    std::string const GOVERNANCE_WALLET_ADDRESS = "ZPHSjqHRP2cPUoxHrVXe8K6rjdDdA9JF8WL549DrkDVtiYYbkfkJSvc4bQ6iXVb11Z3hcGETaNPgiMG5wu3fCPjviLk4Nu69oJy";
+    std::string const GOV_WALLET_ADDRESS_2 = "ZPHSjqHRP2cPUoxHrVXe8K6rjdDdA9JF8WL549DrkDVtiYYbkfkJSvc4bQ6iXVb11Z3hcGETaNPgiMG5wu3fCPjviLk4Nu69oJy";
+
+    std::array<std::string, 3> const ORACLE_URLS = {{"127.0.0.1:5555", "127.0.0.1:5555", "127.0.0.1:5555"}};
+
+    std::string const ORACLE_PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----\n"
+      "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBANYU5cF7D5V7mgtGR8Fd/9FwqcG/adDn\n"
+      "15XuOIjsLl3WCw3xCOw1ZBQFV4HX6qzGz2XNXXMhHDc0b4TkSpqx4r8CAwEAAQ==\n"
+      "-----END PUBLIC KEY-----\n";
+
+    uint64_t const YIELD_HEIGHT = 0;
+    uint64_t const AUDIT_HEIGHT = 0;
+    uint64_t const V11_HEIGHT = 1;
+  }
 }
 
 namespace cryptonote
@@ -333,6 +367,7 @@ namespace cryptonote
     TESTNET,
     STAGENET,
     FAKECHAIN,
+    DEVNET,
     UNDEFINED = 255
   };
   struct config_t
@@ -348,6 +383,9 @@ namespace cryptonote
     uint32_t const GENESIS_NONCE;
     std::array<std::string, 3> const ORACLE_URLS;
     std::string const ORACLE_PUBLIC_KEY;
+    uint64_t const YIELD_HEIGHT;
+    uint64_t const AUDIT_HEIGHT;
+    uint64_t const V11_HEIGHT;
   };
   inline const config_t& get_config(network_type nettype)
   {
@@ -362,7 +400,10 @@ namespace cryptonote
       ::config::GENESIS_TX,
       ::config::GENESIS_NONCE,
       ::config::ORACLE_URLS,
-      ::config::ORACLE_PUBLIC_KEY
+      ::config::ORACLE_PUBLIC_KEY,
+      YIELD_FORK_HEIGHT,
+      AUDIT_FORK_HEIGHT,
+      HF_VERSION_V11_FORK_HEIGHT
     };
     static const config_t testnet = {
       ::config::testnet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
@@ -375,7 +416,10 @@ namespace cryptonote
       ::config::testnet::GENESIS_TX,
       ::config::testnet::GENESIS_NONCE,
       ::config::testnet::ORACLE_URLS,
-      ::config::testnet::ORACLE_PUBLIC_KEY
+      ::config::testnet::ORACLE_PUBLIC_KEY,
+      YIELD_FORK_HEIGHT,
+      AUDIT_FORK_HEIGHT,
+      HF_VERSION_V11_FORK_HEIGHT
     };
     static const config_t stagenet = {
       ::config::stagenet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
@@ -388,13 +432,33 @@ namespace cryptonote
       ::config::stagenet::GENESIS_TX,
       ::config::stagenet::GENESIS_NONCE,
       ::config::stagenet::ORACLE_URLS,
-      ::config::stagenet::ORACLE_PUBLIC_KEY
+      ::config::stagenet::ORACLE_PUBLIC_KEY,
+      YIELD_FORK_HEIGHT,
+      AUDIT_FORK_HEIGHT,
+      HF_VERSION_V11_FORK_HEIGHT
+    };
+    static const config_t devnet = {
+      ::config::devnet::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
+      ::config::devnet::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
+      ::config::devnet::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
+      ::config::devnet::P2P_DEFAULT_PORT,
+      ::config::devnet::RPC_DEFAULT_PORT,
+      ::config::devnet::ZMQ_RPC_DEFAULT_PORT,
+      ::config::devnet::NETWORK_ID,
+      ::config::devnet::GENESIS_TX,
+      ::config::devnet::GENESIS_NONCE,
+      ::config::devnet::ORACLE_URLS,
+      ::config::devnet::ORACLE_PUBLIC_KEY,
+      ::config::devnet::YIELD_HEIGHT,
+      ::config::devnet::AUDIT_HEIGHT,
+      ::config::devnet::V11_HEIGHT
     };
     switch (nettype)
     {
       case MAINNET: return mainnet;
       case TESTNET: return testnet;
       case STAGENET: return stagenet;
+      case DEVNET: return devnet;
       case FAKECHAIN: return mainnet;
       default: throw std::runtime_error("Invalid network type");
     }

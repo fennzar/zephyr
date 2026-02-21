@@ -338,11 +338,12 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
   m_db = db;
 
   m_nettype = test_options != NULL ? FAKECHAIN : nettype;
+  m_db->set_nettype(m_nettype);
   m_offline = offline;
   m_fixed_difficulty = fixed_difficulty;
   if (m_hardfork == nullptr)
   {
-    if (m_nettype ==  FAKECHAIN || m_nettype == STAGENET)
+    if (m_nettype ==  FAKECHAIN || m_nettype == STAGENET || m_nettype == DEVNET)
       m_hardfork = new HardFork(*db, 1, 0);
     else if (m_nettype == TESTNET)
       m_hardfork = new HardFork(*db, 1, testnet_hard_fork_version_1_till);
@@ -363,6 +364,11 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
   {
     for (size_t n = 0; n < num_stagenet_hard_forks; ++n)
       m_hardfork->add_fork(stagenet_hard_forks[n].version, stagenet_hard_forks[n].height, stagenet_hard_forks[n].threshold, stagenet_hard_forks[n].time);
+  }
+  else if (m_nettype == DEVNET)
+  {
+    for (size_t n = 0; n < num_devnet_hard_forks; ++n)
+      m_hardfork->add_fork(devnet_hard_forks[n].version, devnet_hard_forks[n].height, devnet_hard_forks[n].threshold, devnet_hard_forks[n].time);
   }
   else
   {
@@ -1397,7 +1403,7 @@ bool Blockchain::validate_miner_transaction(
   uint64_t height = m_db->height();
 
   uint64_t base_outputs = 2;
-  if (version >= HF_VERSION_V6 && height != HF_VERSION_V11_FORK_HEIGHT) {
+  if (version >= HF_VERSION_V6 && height != get_config(m_nettype).V11_HEIGHT) {
     base_outputs = 1;
   }
 
@@ -1440,7 +1446,7 @@ bool Blockchain::validate_miner_transaction(
         return false;
       }
 
-      if (height == HF_VERSION_V11_FORK_HEIGHT) {
+      if (height == get_config(m_nettype).V11_HEIGHT) {
         // validate second output is one-time unauditable ZEPH payout
         std::string second_output_asset_type;
         ok = cryptonote::get_output_asset_type(b.miner_tx.vout[1], second_output_asset_type);
@@ -1533,7 +1539,7 @@ bool Blockchain::validate_miner_transaction(
     yield_reward = get_zeph_yield_reward(base_reward);
   }
 
-  if (height == HF_VERSION_V11_FORK_HEIGHT) {
+  if (height == get_config(m_nettype).V11_HEIGHT) {
     if (money_in_use_map["ZPH"] != base_reward - reserve_reward - yield_reward + fee_map["ZPH"] + UNAUDITABLE_ZEPH_AMOUNT)
     {
       MERROR_VER("coinbase transaction amount mismatch (" << print_money(money_in_use_map["ZPH"]) << "). Block reward is " << print_money(base_reward - reserve_reward + fee_map["ZPH"] + UNAUDITABLE_ZEPH_AMOUNT) << "(" << print_money(base_reward - reserve_reward) << "+" << print_money(fee_map["ZPH"]) << "+" << print_money(UNAUDITABLE_ZEPH_AMOUNT) << ")");
@@ -1992,6 +1998,15 @@ bool Blockchain::get_pricing_record(oracle::pricing_record& pr, uint64_t timesta
 
       pr.reserve_ratio = cryptonote::get_pr_reserve_ratio(circ_supply, pr.spot);
       pr.reserve_ratio_ma = cryptonote::get_moving_average_reserve_ratio(pricing_record_history, pr.reserve_ratio);
+
+      // DEVNET bootstrap: when history < 719 blocks, MAs return 0 causing empty PRs.
+      // Use spot values as MAs instead — semantically correct with no history.
+      if (m_nettype == DEVNET && pricing_record_history.size() < 719) {
+        pr.moving_average = pr.spot;
+        pr.stable_ma = pr.stable;
+        pr.reserve_ma = pr.reserve;
+        pr.reserve_ratio_ma = pr.reserve_ratio;
+      }
 
       if (hf_version >= HF_VERSION_V6) {
         pr.yield_price = cryptonote::get_yield_coin_price(circ_supply);
@@ -3591,7 +3606,7 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
   size_t n_unmixable = 0, n_mixable = 0;
   size_t min_actual_mixin = std::numeric_limits<size_t>::max();
   size_t max_actual_mixin = 0;
-  const size_t min_mixin = 15;
+  const size_t min_mixin = m_nettype == DEVNET ? 1 : 15;
   for (const auto& txin : tx.vin)
   {
     // non txin_zephyr_key inputs will be rejected below
@@ -3645,7 +3660,7 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
       tvc.m_low_mixin = true;
       return false;
     }
-  } else if (min_actual_mixin > 15)
+  } else if (min_actual_mixin > (m_nettype == DEVNET ? 1 : 15))
   {
     MERROR_VER("Tx " << get_transaction_hash(tx) << " has invalid ring size (" << (min_actual_mixin + 1) << "), it should be " << (min_mixin + 1));
     tvc.m_low_mixin = true;
@@ -4386,6 +4401,14 @@ leave: {
       uint64_t reserve_ratio = cryptonote::get_pr_reserve_ratio(circ_supply, bl.pricing_record.spot);
       uint64_t reserve_ratio_ma = cryptonote::get_moving_average_reserve_ratio(pricing_record_history, bl.pricing_record.reserve_ratio);
 
+      // DEVNET bootstrap: use spot values as MAs when history < 719
+      if (m_nettype == DEVNET && pricing_record_history.size() < 719) {
+        moving_average_price = bl.pricing_record.spot;
+        stable_price_ma = stable_price;
+        reserve_price_ma = reserve_price;
+        reserve_ratio_ma = reserve_ratio;
+      }
+
       if (
         moving_average_price != bl.pricing_record.moving_average ||
         stable_price != bl.pricing_record.stable ||
@@ -4876,7 +4899,7 @@ leave: {
     }
   }
 
-  if (blockchain_height == HF_VERSION_V11_FORK_HEIGHT) {
+  if (blockchain_height == get_config(m_nettype).V11_HEIGHT) {
     base_reward += UNAUDITABLE_ZEPH_AMOUNT;
   }
 

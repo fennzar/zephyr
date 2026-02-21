@@ -380,7 +380,7 @@ void BlockchainDB::pop_reserve_reward(block& blk, const uint64_t& block_weight)
       }
     }
 
-    if (block_height == HF_VERSION_V11_FORK_HEIGHT) {
+    if (block_height == cryptonote::get_config(m_nettype).V11_HEIGHT) {
       base_reward += UNAUDITABLE_ZEPH_AMOUNT;
     }
 

@@ -1974,7 +1974,11 @@ public:
    */
   void set_auto_remove_logs(bool auto_remove) { m_auto_remove_logs = auto_remove; }
 
+  void set_nettype(cryptonote::network_type nettype) { m_nettype = nettype; }
+  cryptonote::network_type get_nettype() const { return m_nettype; }
+
   bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
+  cryptonote::network_type m_nettype = cryptonote::MAINNET;  //!< Network type for height-dependent constants
   mutable epee::critical_section m_synchronization_lock;  //!< A lock, currently for when BlockchainLMDB needs to resize the backing db file
 
 };  // class BlockchainDB

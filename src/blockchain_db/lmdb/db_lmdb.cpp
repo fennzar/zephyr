@@ -972,7 +972,7 @@ void BlockchainLMDB::add_block(const block& blk, size_t block_weight, uint64_t l
   m_cum_count++;
 
   if (blk.major_version >= HF_VERSION_AUDIT) {
-    if (m_height == AUDIT_FORK_HEIGHT) {
+    if (m_height == cryptonote::get_config(m_nettype).AUDIT_HEIGHT) {
       uint64_t zeph_reserve_currency_type_v1 = std::find(oracle::ASSET_TYPES.begin(), oracle::ASSET_TYPES.end(), "ZEPH") - oracle::ASSET_TYPES.begin();
       uint64_t zsd_reserve_currency_type_v1 = std::find(oracle::ASSET_TYPES.begin(), oracle::ASSET_TYPES.end(), "ZYIELDRSV") - oracle::ASSET_TYPES.begin();
       MDB_val_copy<uint64_t> zeph_reserve_idx_v1(zeph_reserve_currency_type_v1);
@@ -1162,7 +1162,7 @@ void BlockchainLMDB::remove_block_rewards(const uint64_t& zeph_generated, const 
   CURSOR(total_asset_supply)
   CURSOR(reserve_asset_supply)
 
-  if (m_height == AUDIT_FORK_HEIGHT) {
+  if (m_height == cryptonote::get_config(m_nettype).AUDIT_HEIGHT) {
     uint64_t zeph_asset_currency_type = std::find(oracle::ASSET_TYPES_V2.begin(), oracle::ASSET_TYPES_V2.end(), "ZPH") - oracle::ASSET_TYPES_V2.begin();
     uint64_t zsd_asset_currency_type = std::find(oracle::ASSET_TYPES_V2.begin(), oracle::ASSET_TYPES_V2.end(), "ZSD") - oracle::ASSET_TYPES_V2.begin();
     uint64_t zrs_asset_currency_type = std::find(oracle::ASSET_TYPES_V2.begin(), oracle::ASSET_TYPES_V2.end(), "ZRS") - oracle::ASSET_TYPES_V2.begin();
@@ -3845,7 +3845,7 @@ std::vector<std::pair<std::string, std::string>> BlockchainLMDB::get_circulating
   int result = 0;
 
   MDB_cursor_op op = MDB_FIRST;
-  if (m_height >= HF_VERSION_V11_FORK_HEIGHT) {
+  if (m_height >= cryptonote::get_config(m_nettype).V11_HEIGHT) {
     while (1)
     {
       int result = mdb_cursor_get(m_cur_total_asset_supply, &k, &v, op);

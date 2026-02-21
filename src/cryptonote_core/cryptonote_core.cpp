@@ -83,6 +83,11 @@ namespace cryptonote
   , "Run on stagenet. The wallet must be launched with --stagenet flag."
   , false
   };
+  const command_line::arg_descriptor<bool, false> arg_devnet_on  = {
+    "devnet"
+  , "Run on devnet. Fresh chain starting at HFv11 with local oracle."
+  , false
+  };
   const command_line::arg_descriptor<bool> arg_regtest_on  = {
     "regtest"
   , "Run in a regression testing mode."
@@ -327,6 +332,7 @@ namespace cryptonote
 
     command_line::add_arg(desc, arg_testnet_on);
     command_line::add_arg(desc, arg_stagenet_on);
+    command_line::add_arg(desc, arg_devnet_on);
     command_line::add_arg(desc, arg_regtest_on);
     command_line::add_arg(desc, arg_keep_fakechain);
     command_line::add_arg(desc, arg_fixed_difficulty);
@@ -359,7 +365,8 @@ namespace cryptonote
     {
       const bool testnet = command_line::get_arg(vm, arg_testnet_on);
       const bool stagenet = command_line::get_arg(vm, arg_stagenet_on);
-      m_nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+      const bool devnet = command_line::get_arg(vm, arg_devnet_on);
+      m_nettype = testnet ? TESTNET : stagenet ? STAGENET : devnet ? DEVNET : MAINNET;
     }
 
     m_config_folder = command_line::get_arg(vm, arg_data_dir);

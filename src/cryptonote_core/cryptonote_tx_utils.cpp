@@ -234,7 +234,7 @@ namespace cryptonote
       }
     }
 
-    if (height == HF_VERSION_V11_FORK_HEIGHT) {
+    if (height == get_config(nettype).V11_HEIGHT) {
       add_tx_pub_key_to_extra(tx, gov_key.pub);
       cryptonote::address_parse_info gov_wallet_address_2;
       cryptonote::get_account_address_from_str(gov_wallet_address_2, nettype, get_governance_address_2(nettype));
@@ -366,6 +366,8 @@ namespace cryptonote
       return ::config::testnet::GOVERNANCE_WALLET_ADDRESS;
     } else if (nettype == STAGENET) {
       return ::config::stagenet::GOVERNANCE_WALLET_ADDRESS;
+    } else if (nettype == DEVNET) {
+      return ::config::devnet::GOVERNANCE_WALLET_ADDRESS;
     } else {
       return ::config::GOVERNANCE_WALLET_ADDRESS;
     }
@@ -376,6 +378,8 @@ namespace cryptonote
       return ::config::testnet::GOV_WALLET_ADDRESS_2;
     } else if (nettype == STAGENET) {
       return ::config::stagenet::GOV_WALLET_ADDRESS_2;
+    } else if (nettype == DEVNET) {
+      return ::config::devnet::GOV_WALLET_ADDRESS_2;
     } else {
       return ::config::GOV_WALLET_ADDRESS_2;
     }
@@ -733,7 +737,7 @@ namespace cryptonote
     get_circulating_asset_amounts(circ_amounts, zeph_reserve, num_stables, num_reserves);
 
     multiprecision::uint128_t assets = zeph_reserve * oracle_price;
-    if (num_stables == 0) return 0;
+    if (num_stables == 0) return COIN; // sentinel non-zero value; real ratio enforcement is in reserve_ratio_satisfied()
 
     multiprecision::uint128_t reserve_ratio = assets / num_stables;
     reserve_ratio -= (reserve_ratio % 10000);
@@ -1117,7 +1121,7 @@ namespace cryptonote
   uint64_t get_moving_average_price(const std::vector<oracle::pricing_record>& pricing_record_history, uint64_t spot_price)
   {
     if (pricing_record_history.size() < 719) {
-      return 0;
+      return spot_price;
     }
 
     uint64_t sum = 0;
@@ -1134,7 +1138,7 @@ namespace cryptonote
   uint64_t get_moving_average_stable_coin_price(const std::vector<oracle::pricing_record>& pricing_record_history, uint64_t stable_price)
   {
     if (pricing_record_history.size() < 719) {
-      return 0;
+      return stable_price;
     }
 
     uint64_t sum = 0;
@@ -1151,7 +1155,7 @@ namespace cryptonote
   uint64_t get_moving_average_reserve_coin_price(const std::vector<oracle::pricing_record>& pricing_record_history, uint64_t reserve_price)
   {
     if (pricing_record_history.size() < 719) {
-      return 0;
+      return reserve_price;
     }
 
     uint64_t sum = 0;
@@ -1168,7 +1172,7 @@ namespace cryptonote
   uint64_t get_moving_average_reserve_ratio(const std::vector<oracle::pricing_record>& pricing_record_history, uint64_t reserve_ratio)
   {
     if (pricing_record_history.size() < 719) {
-      return 0;
+      return reserve_ratio;
     }
 
     uint64_t sum = 0;

@@ -64,3 +64,10 @@ const hardfork_t stagenet_hard_forks[] = {
   { 3, 100, 0, 1688814599 }
 };
 const size_t num_stagenet_hard_forks = sizeof(stagenet_hard_forks) / sizeof(stagenet_hard_forks[0]);
+
+const hardfork_t devnet_hard_forks[] = {
+  // v1 at genesis, then HFv11 from block 1
+  { 1, 0, 0, 1685318400 },
+  { 11, 1, 0, 1685318401 },
+};
+const size_t num_devnet_hard_forks = sizeof(devnet_hard_forks) / sizeof(devnet_hard_forks[0]);
