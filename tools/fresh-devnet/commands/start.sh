@@ -105,12 +105,10 @@ echo "Gov wallet: $(echo "$gov_result" | python3 -c "import sys,json; print(json
 
 echo "--- Creating miner wallet ---"
 rpc_call $MINER_WALLET_RPC_PORT "create_wallet" '{"filename":"miner","password":"","language":"English"}' > /dev/null 2>&1 || true
-sleep 1
 echo "Miner wallet: $("$ZEPHYR_CLI" address miner 2>/dev/null || echo "UNKNOWN")"
 
 echo "--- Creating test wallet ---"
 rpc_call $TEST_WALLET_RPC_PORT "create_wallet" '{"filename":"test","password":"","language":"English"}' > /dev/null 2>&1 || true
-sleep 1
 echo "Test wallet: $("$ZEPHYR_CLI" address test 2>/dev/null || echo "UNKNOWN")"
 
 # 7. Start mining to miner wallet on node1

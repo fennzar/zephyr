@@ -104,7 +104,7 @@ wait_for_height() {
             echo " height=$height"
             return 0
         fi
-        sleep 1
+        sleep 0.1
         echo -n "."
     done
 }

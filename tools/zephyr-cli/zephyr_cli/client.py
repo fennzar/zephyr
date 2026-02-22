@@ -177,14 +177,16 @@ class ZephyrClient:
         """Get daemon info (height, difficulty, connections, etc.)."""
         return self.daemon.get_info()
 
-    def wait_for_height(self, target, refresh_wallets=True, poll_interval=1, stream=True):
+    def wait_for_height(self, target, refresh_wallets=True, poll_interval=0.1, stream=True):
         """Block until chain reaches target height. Optionally refresh wallets."""
         target = int(target)
+        last_print = 0.0
         while True:
             h = self.height()
             if h >= target:
                 if stream:
-                    print(f'Height {h} reached')
+                    sys.stdout.write(f'\rHeight {h} reached{" " * 20}\n')
+                    sys.stdout.flush()
                 if refresh_wallets:
                     for w in self.wallets.values():
                         try:
@@ -192,9 +194,11 @@ class ZephyrClient:
                         except Exception:
                             pass
                 return h
-            if stream:
+            now = time.monotonic()
+            if stream and (now - last_print) >= 0.5:
                 sys.stdout.write(f'\rWaiting for height {target}... ({h})')
                 sys.stdout.flush()
+                last_print = now
             time.sleep(poll_interval)
 
     def mine_start(self, wallet='miner', threads=2):

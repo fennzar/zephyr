@@ -7,7 +7,9 @@ DEFAULTS = {
     'wallets': {
         'gov':   {'port': 48769, 'description': 'Governance wallet'},
         'miner': {'port': 48767, 'description': 'Miner wallet'},
-        'test':  {'port': 48768, 'description': 'Test wallet'},
+        'test':   {'port': 48768, 'description': 'Test wallet'},
+        'bridge': {'port': 48770, 'description': 'Bridge wallet'},
+        'engine': {'port': 48771, 'description': 'Engine wallet'},
     },
 }
 
