@@ -70,11 +70,17 @@ class SetupState:
         self._print_supply_summary()
 
     def _phase_zrs(self):
-        """Phase 1: Mint ZRS (4 x 300K ZPH -> ZRS)."""
-        _log('--- Phase 1: Mint ZRS (4 x 300,000 ZPH -> ZRS) ---')
-        for i in range(1, 5):
-            _log(f'  ZRS mint {i}/4:')
-            self.client.convert('gov', 300_000, 'ZPH', 'ZRS')
+        """Phase 1: Mint ZRS (3 x 500K ZPH -> ZRS).
+
+        More ZRS raises the reserve ratio, giving Phase 2 room to mint
+        enough ZSD for seeding (~155K) + ZYS (~94K) + test (5K).
+        """
+        ZRS_ROUNDS = 3
+        ZRS_CHUNK = 500_000
+        _log(f'--- Phase 1: Mint ZRS ({ZRS_ROUNDS} x {ZRS_CHUNK:,} ZPH -> ZRS) ---')
+        for i in range(1, ZRS_ROUNDS + 1):
+            _log(f'  ZRS mint {i}/{ZRS_ROUNDS}:')
+            self.client.convert('gov', ZRS_CHUNK, 'ZPH', 'ZRS')
             self._wait_blocks(12)
         _log('Phase 1 complete (ZRS minted)')
         _log('')
@@ -84,18 +90,22 @@ class SetupState:
     def _phase_zsd(self):
         """Phase 2: Mint ZSD until supply cap OR RR floor is reached.
 
-        Uses 25K ZPH per round for finer RR granularity.
+        Uses 100K ZPH per round (fewer rounds, faster init).
         Stops at the EARLIER of: ZSD_MINT_LIMIT or TARGET_RR.
         """
+        ZSD_ROUNDS_MAX = 3
+        ZSD_CHUNK = 100_000
+
         _log('')
-        _log(f'--- Phase 2: Mint ZSD (cap {self.zsd_mint_limit:,}, RR floor {self.target_rr}) ---')
+        _log(f'--- Phase 2: Mint ZSD (up to {ZSD_ROUNDS_MAX} x {ZSD_CHUNK:,} ZPH, '
+             f'cap {self.zsd_mint_limit:,}, RR floor {self.target_rr}) ---')
 
         zsd_before = self._get_supply_field('num_stables')
         zsd_limit_atomic = int(self.zsd_mint_limit * COIN)
         prev_rr = None
         rounds = 0
 
-        for i in range(1, 31):
+        for i in range(1, ZSD_ROUNDS_MAX + 1):
             zsd_now = self._get_supply_field('num_stables')
             zsd_minted = zsd_now - zsd_before
             rr = self._get_reserve_ratio()
@@ -122,8 +132,8 @@ class SetupState:
                         break
 
             prev_rr = rr
-            _log(f'  ZSD mint {i}:')
-            self.client.convert('gov', 25_000, 'ZPH', 'ZSD')
+            _log(f'  ZSD mint {i}/{ZSD_ROUNDS_MAX}:')
+            self.client.convert('gov', ZSD_CHUNK, 'ZPH', 'ZSD')
             rounds = i
             self._wait_blocks(12)
 
