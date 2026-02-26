@@ -90,15 +90,15 @@ class SetupState:
     def _phase_zsd(self):
         """Phase 2: Mint ZSD until supply cap OR RR floor is reached.
 
-        Uses 100K ZPH per round (fewer rounds, faster init).
-        Stops at the EARLIER of: ZSD_MINT_LIMIT or TARGET_RR.
+        Uses 100K ZPH per round, then an adaptive final round to land
+        close to the target RR (max 3 rounds total).
         """
         ZSD_ROUNDS_MAX = 3
         ZSD_CHUNK = 100_000
 
         _log('')
-        _log(f'--- Phase 2: Mint ZSD (up to {ZSD_ROUNDS_MAX} x {ZSD_CHUNK:,} ZPH, '
-             f'cap {self.zsd_mint_limit:,}, RR floor {self.target_rr}) ---')
+        _log(f'--- Phase 2: Mint ZSD (up to {ZSD_ROUNDS_MAX} rounds, '
+             f'cap {self.zsd_mint_limit:,}, RR target {self.target_rr}) ---')
 
         zsd_before = self._get_supply_field('num_stables')
         zsd_limit_atomic = int(self.zsd_mint_limit * COIN)
@@ -123,12 +123,20 @@ class SetupState:
                 if rr <= self.target_rr:
                     _log(f'  RR reached {rr:.4f} <= target {self.target_rr}, stopping')
                     break
-                # Predictive stop: estimate next round's RR from last drop
+                # Predictive stop: if a full chunk would overshoot, use adaptive amount
                 if prev_rr is not None:
                     drop = prev_rr - rr
                     predicted = rr - drop
                     if predicted <= self.target_rr:
-                        _log(f'  Next round would drop RR to ~{predicted:.4f} (below {self.target_rr}), stopping')
+                        # Calculate exact ZPH to land at target RR
+                        adaptive = self._calc_adaptive_zsd_amount(rr)
+                        if adaptive and adaptive >= 5_000:
+                            _log(f'  Adaptive final round: {adaptive:,} ZPH (target RR {self.target_rr})')
+                            self.client.convert('gov', adaptive, 'ZPH', 'ZSD')
+                            rounds = i
+                            self._wait_blocks(12)
+                        else:
+                            _log(f'  Full chunk would overshoot, adaptive too small, stopping')
                         break
 
             prev_rr = rr
@@ -336,6 +344,29 @@ class SetupState:
             return None
 
     # ── Helpers ───────────────────────────────────────────────────────
+
+    def _calc_adaptive_zsd_amount(self, current_rr):
+        """Calculate ZPH needed to reach target RR from current state.
+
+        Uses: target_rr = (R + Δ) / (L + Δ), solved for Δ in ZSD terms,
+        then converted to ZPH via stable rate. Returns whole ZPH or None.
+        """
+        try:
+            info = self.client.reserve_info()
+            zsd_supply = int(info.get('num_stables', 0)) / COIN
+            stable_rate = float(info.get('pr', {}).get('stable', 0)) / COIN
+            if zsd_supply <= 0 or stable_rate <= 0 or self.target_rr <= 1:
+                return None
+            reserves = current_rr * zsd_supply  # R in ZSD terms
+            # Δ = (R - target * L) / (target - 1)
+            delta_zsd = (reserves - self.target_rr * zsd_supply) / (self.target_rr - 1)
+            if delta_zsd <= 0:
+                return None
+            # stable_rate = ZPH per ZSD, so ZPH = delta_zsd * stable_rate
+            zph_needed = int(delta_zsd * stable_rate)
+            return zph_needed if zph_needed > 0 else None
+        except Exception:
+            return None
 
     def _get_reserve_ratio(self):
         """Get current reserve ratio as float."""
