@@ -187,7 +187,12 @@
 
 // DEVNET overrides these via config_t; macros are for mainnet/testnet/stagenet only
 
-#define UNAUDITABLE_ZEPH_AMOUNT                ((uint64_t)1921650000000000000) // 1921650.000000000000 ZEPH
+#ifdef DEVNET_MIRROR_SUPPLY
+// Match mainnet ZPH circulating (~11.16M) for mirror mode testing
+#define UNAUDITABLE_ZEPH_AMOUNT                ((uint64_t)11160000000000000000ULL) // ~11,160,000 ZEPH
+#else
+#define UNAUDITABLE_ZEPH_AMOUNT                ((uint64_t)1921650000000000000) // 1,921,650 ZEPH
+#endif
 
 #define PER_KB_FEE_QUANTIZATION_DECIMALS        8
 #define CRYPTONOTE_SCALING_2021_FEE_ROUNDING_PLACES 2
