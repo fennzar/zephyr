@@ -15,17 +15,41 @@ while [[ $# -gt 0 ]]; do
         --status)  mode="status"; shift ;;
         --force)   mode="force"; shift ;;
         --recover) mode="recover"; shift ;;
+        --hard)    mode="hard"; shift ;;
         *)
-            echo "Usage: run.sh reset [--status|--force|--recover]"
+            echo "Usage: run.sh reset [--status|--force|--recover|--hard]"
             echo ""
             echo "Options:"
             echo "  --status   Show current height vs checkpoint height"
             echo "  --force    Skip confirmations and continue on non-fatal errors"
             echo "  --recover  Recovery mode: rescan wallets + restart mining only"
+            echo "  --hard     LMDB snapshot restore (preferred over pop_blocks)"
             exit 1
             ;;
     esac
 done
+
+# --hard: LMDB snapshot restore
+if [[ "$mode" == "hard" ]]; then
+    echo "=== DEVNET Hard Reset (LMDB Snapshot Restore) ==="
+    echo ""
+
+    # Stop everything
+    "$SCRIPT_DIR/stop.sh" 2>/dev/null || true
+
+    # Restore from snapshot
+    snapshot_name="${1:-default}"
+    snapshot_file="$SNAPSHOT_DIR/${snapshot_name}.tar.gz"
+    if [[ ! -f "$snapshot_file" ]]; then
+        echo "Error: No snapshot file at $snapshot_file"
+        echo "Available snapshots:"
+        ls -1 "$SNAPSHOT_DIR"/*.tar.gz 2>/dev/null || echo "  (none)"
+        exit 1
+    fi
+
+    echo "Restoring snapshot: $snapshot_name"
+    exec "$SCRIPT_DIR/restore.sh" "$snapshot_name"
+fi
 
 # Check node is running
 current_height=$("$ZEPHYR_CLI" height 2>/dev/null) || {
@@ -75,7 +99,7 @@ if [[ "$mode" == "recover" ]]; then
     exit 0
 fi
 
-# Normal reset
+# Normal reset (pop_blocks)
 echo "=== DEVNET Reset to Checkpoint ==="
 echo ""
 echo "Current height:    $current_height"

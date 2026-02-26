@@ -2,7 +2,11 @@
 # Shared constants, RPC helpers, and utility functions for fresh-devnet scripts.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-BUILD_DIR="$REPO_ROOT/build/devnet"
+if [ "${DEVNET_MODE:-custom}" = "mirror" ]; then
+    BUILD_DIR="$REPO_ROOT/build/devnet-mirror"
+else
+    BUILD_DIR="$REPO_ROOT/build/devnet"
+fi
 DATA_DIR="/tmp/zephyr-devnet"
 NODE1_DATA="$DATA_DIR/node1"
 NODE2_DATA="$DATA_DIR/node2"

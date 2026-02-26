@@ -2,6 +2,7 @@
 
 import argparse
 import cmd
+import json
 import sys
 
 from .client import ZephyrClient
@@ -97,8 +98,9 @@ def build_parser():
 
     # ── Daemon operations ─────────────────────────────────────────────
 
-    # height
-    sub.add_parser('height', help='Show current blockchain height')
+    # height [--all]
+    p = sub.add_parser('height', help='Show current blockchain height')
+    p.add_argument('--all', action='store_true', help='Show both node1 and node2 heights')
 
     # wait <n>
     p = sub.add_parser('wait', help='Wait until chain reaches height N')
@@ -117,9 +119,83 @@ def build_parser():
     # info
     sub.add_parser('info', help='Show daemon info')
 
-    # pop <blocks>
+    # pop <blocks> [--all]
     p = sub.add_parser('pop', help='Pop N blocks from the chain')
     p.add_argument('count', type=int, help='Number of blocks to pop')
+    p.add_argument('--all', action='store_true', help='Pop from both node1 and node2')
+
+    # flush-txpool
+    sub.add_parser('flush-txpool', help='Flush the transaction pool')
+
+    # wait-daemons
+    p = sub.add_parser('wait-daemons', help='Wait until both daemons are ready')
+    p.add_argument('--timeout', type=int, default=30, help='Timeout in seconds (default: 30)')
+
+    # ── Wallet management ────────────────────────────────────────────
+    wallet_p = sub.add_parser('wallet', help='Wallet management')
+    wallet_sub = wallet_p.add_subparsers(dest='wallet_cmd')
+
+    p = wallet_sub.add_parser('create', help='Create or open a wallet')
+    p.add_argument('name', help='Wallet name (must exist in config)')
+    p.add_argument('--password', default='')
+
+    p = wallet_sub.add_parser('open', help='Open an existing wallet')
+    p.add_argument('name')
+    p.add_argument('--password', default='')
+
+    p = wallet_sub.add_parser('restore', help='Restore wallet from keys')
+    p.add_argument('name')
+    p.add_argument('--address', required=True)
+    p.add_argument('--spendkey', required=True)
+    p.add_argument('--viewkey', required=True)
+    p.add_argument('--password', default='')
+    p.add_argument('--restore-height', type=int, default=0)
+
+    p = wallet_sub.add_parser('close', help='Close a wallet')
+    p.add_argument('name')
+
+    # ── Oracle subcommands ─────────────────────────────────────────
+    oracle_p = sub.add_parser('oracle', help='Oracle management (devnet)')
+    oracle_sub = oracle_p.add_subparsers(dest='oracle_cmd')
+
+    oracle_sub.add_parser('status', help='Show full oracle state')
+
+    p = oracle_sub.add_parser('ma', help='Set oracle moving average')
+    p.add_argument('value', type=float, help='USD price for moving average')
+
+    p = oracle_sub.add_parser('ma-mode', help='Set MA tracking mode')
+    p.add_argument('mode', choices=['spot', 'manual', 'ema', 'mirror'], help='MA mode')
+    p.add_argument('--alpha', type=float, default=0.1, help='EMA alpha (default: 0.1)')
+
+    oracle_sub.add_parser('supply-sync', help='Enable supply sync mode')
+    oracle_sub.add_parser('supply-status', help='Show supply sync state')
+
+    # ── Devnet lifecycle ─────────────────────────────────────────────
+    devnet_p = sub.add_parser('devnet', help='Devnet lifecycle management')
+    devnet_sub = devnet_p.add_subparsers(dest='devnet_cmd')
+
+    p = devnet_sub.add_parser('init', help='Bootstrap devnet (gov/miner/test + mint + checkpoint)')
+    p.add_argument('--oracle-price', type=float, default=2.0)
+    p.add_argument('--mode', choices=['custom', 'mirror'], default='custom')
+    p.add_argument('--target-rr', type=float, default=7.0)
+    p.add_argument('--zsd-limit', type=int, default=450000)
+    p.add_argument('--checkpoint-file', default=None)
+    p.add_argument('--mining-threads', type=int, default=2)
+
+    p = devnet_sub.add_parser('snapshot', help='Save LMDB snapshot')
+    p.add_argument('name', nargs='?', default='default')
+    p.add_argument('--snapshot-dir', default=None)
+
+    p = devnet_sub.add_parser('reset', help='Restore LMDB snapshot')
+    p.add_argument('name', nargs='?', default='default')
+    p.add_argument('--snapshot-dir', default=None)
+
+    # ── Setup state ──────────────────────────────────────────────────
+    p = sub.add_parser('setup-state', help='Run devnet minting sequence')
+    p.add_argument('--mode', choices=['custom', 'mirror'], default='custom')
+    p.add_argument('--target-rr', type=float, default=7.0)
+    p.add_argument('--zsd-limit', type=int, default=450000)
+    p.add_argument('--oracle-price', type=float, default=None)
 
     return parser
 
@@ -187,9 +263,51 @@ def run_command(client, args):
             print(f'Oracle: ${price:.2f}')
         return True
 
+    if args.command == 'oracle':
+        if args.oracle_cmd == 'status':
+            data = client.oracle_status()
+            spot = data.get('spot', 0) / 1e12
+            ma = data.get('moving_average', 0) / 1e12
+            mode = data.get('ma_mode', 'unknown')
+            print(f'Oracle Status:')
+            print(f'  Spot:  ${spot:.4f}')
+            print(f'  MA:    ${ma:.4f}')
+            print(f'  Mode:  {mode}')
+            # Print any other fields
+            for k, v in data.items():
+                if k not in ('spot', 'moving_average', 'ma_mode'):
+                    print(f'  {k}: {v}')
+        elif args.oracle_cmd == 'ma':
+            client.oracle_set_ma(args.value)
+            print(f'Oracle MA set to ${args.value:.2f}')
+        elif args.oracle_cmd == 'ma-mode':
+            client.oracle_set_ma_mode(args.mode, alpha=args.alpha)
+            print(f'Oracle MA mode set to {args.mode} (alpha={args.alpha})')
+        elif args.oracle_cmd == 'supply-sync':
+            client.oracle_supply_sync()
+            print('Supply sync enabled')
+        elif args.oracle_cmd == 'supply-status':
+            data = client.oracle_supply_status()
+            print(json.dumps(data, indent=2))
+        else:
+            print('Usage: oracle {status|ma|ma-mode|supply-sync|supply-status} ...')
+        return True
+
     if args.command == 'height':
-        h = client.height()
-        print(h)
+        if getattr(args, 'all', False):
+            try:
+                h1 = client.height()
+                print(f'node1: {h1}')
+            except Exception as e:
+                print(f'node1: error ({e})', file=sys.stderr)
+            try:
+                h2 = client.height2()
+                print(f'node2: {h2}')
+            except Exception as e:
+                print(f'node2: error ({e})', file=sys.stderr)
+        else:
+            h = client.height()
+            print(h)
         return True
 
     if args.command == 'wait':
@@ -217,8 +335,68 @@ def run_command(client, args):
         return True
 
     if args.command == 'pop':
-        client.pop_blocks(args.count)
-        print(f'Popped {args.count} blocks')
+        if getattr(args, 'all', False):
+            try:
+                client.pop_blocks(args.count)
+                print(f'node1: popped {args.count} blocks')
+            except Exception as e:
+                print(f'node1: error ({e})', file=sys.stderr)
+            try:
+                client.pop_blocks2(args.count)
+                print(f'node2: popped {args.count} blocks')
+            except Exception as e:
+                print(f'node2: error ({e})', file=sys.stderr)
+        else:
+            client.pop_blocks(args.count)
+            print(f'Popped {args.count} blocks')
+        return True
+
+    if args.command == 'flush-txpool':
+        client.flush_txpool()
+        print('Transaction pool flushed')
+        return True
+
+    if args.command == 'wait-daemons':
+        client.wait_for_daemons(timeout=args.timeout)
+        print('Both daemons ready')
+        return True
+
+    if args.command == 'wallet':
+        if args.wallet_cmd == 'create':
+            client.create_wallet(args.name, password=args.password)
+            print(f'Wallet {args.name}: created/opened')
+        elif args.wallet_cmd == 'open':
+            if args.name == 'all':
+                results = client.open_all_wallets(password=args.password)
+                for name, status in results.items():
+                    print(f'  {name}: {status}')
+                print(f'Wallets opened ({len(results)})')
+            else:
+                client.open_wallet(args.name, password=args.password)
+                print(f'Wallet {args.name}: opened')
+        elif args.wallet_cmd == 'restore':
+            client.restore_wallet(args.name, address=args.address,
+                                  spendkey=args.spendkey, viewkey=args.viewkey,
+                                  password=args.password,
+                                  restore_height=args.restore_height)
+            print(f'Wallet {args.name}: restored from keys')
+        elif args.wallet_cmd == 'close':
+            client.close_wallet(args.name)
+            print(f'Wallet {args.name}: closed')
+        else:
+            print('Usage: wallet {create|open|restore|close} ...')
+        return True
+
+    if args.command == 'setup-state':
+        from .setup_state import SetupState
+        ss = SetupState(client, mode=args.mode, target_rr=args.target_rr,
+                        zsd_mint_limit=args.zsd_limit, oracle_price=args.oracle_price)
+        ss.run()
+        return True
+
+    if args.command == 'devnet':
+        from .devnet import run_devnet_command
+        run_devnet_command(client, args)
         return True
 
     return False
@@ -300,6 +478,10 @@ class ZephyrShell(cmd.Cmd):
         """price [value] — Get or set oracle price"""
         self._parse_and_run('price', arg)
 
+    def do_oracle(self, arg):
+        """oracle {status|ma|ma-mode|supply-sync|supply-status} — Oracle management"""
+        self._parse_and_run('oracle', arg)
+
     # Daemon operations
     def do_height(self, arg):
         """height — Show current blockchain height"""
@@ -324,6 +506,18 @@ class ZephyrShell(cmd.Cmd):
     def do_pop(self, arg):
         """pop <n> — Pop N blocks from the chain"""
         self._parse_and_run('pop', arg)
+
+    def do_flush_txpool(self, arg):
+        """flush-txpool — Flush the transaction pool"""
+        self._parse_and_run('flush-txpool', arg)
+
+    def do_wait_daemons(self, arg):
+        """wait-daemons [--timeout N] — Wait until both daemons are ready"""
+        self._parse_and_run('wait-daemons', arg)
+
+    def do_wallet(self, arg):
+        """wallet {create|open|restore|close} ... — Wallet management"""
+        self._parse_and_run('wallet', arg)
 
     def do_quit(self, arg):
         """Exit the shell"""

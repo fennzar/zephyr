@@ -35,14 +35,17 @@ class ZephyrClient:
         daemon_cfg = cfg['daemon']
         self.daemon = Daemon(host=daemon_cfg['host'], port=daemon_cfg['port'])
 
+        daemon2_cfg = cfg.get('daemon2', {'host': daemon_cfg['host'], 'port': 47867})
+        self.daemon2 = Daemon(host=daemon2_cfg['host'], port=daemon2_cfg['port'])
+
         self.oracle_url = 'http://{}:{}'.format(
             cfg['oracle']['host'], cfg['oracle']['port'])
 
         self.wallets = {}
         self.wallet_info = {}
         for name, wcfg in cfg.get('wallets', {}).items():
-            self.wallets[name] = Wallet(host=daemon_cfg.get('host', '127.0.0.1'),
-                                        port=wcfg['port'])
+            wallet_host = wcfg.get('host', daemon_cfg.get('host', '127.0.0.1'))
+            self.wallets[name] = Wallet(host=wallet_host, port=wcfg['port'])
             self.wallet_info[name] = wcfg
 
     def _get_wallet(self, name):
@@ -228,6 +231,102 @@ class ZephyrClient:
         """Pop N blocks from the blockchain."""
         return self.daemon.pop_blocks(int(count))
 
+    def height2(self):
+        """Get blockchain height from node2."""
+        info = self.daemon2.get_info()
+        return info.height
+
+    def pop_blocks2(self, count):
+        """Pop N blocks from node2."""
+        return self.daemon2.pop_blocks(int(count))
+
+    def wait_for_daemons(self, timeout=30):
+        """Wait until both daemons respond."""
+        deadline = time.monotonic() + timeout
+        ready = [False, False]
+        while time.monotonic() < deadline:
+            if not ready[0]:
+                try:
+                    self.daemon.get_info()
+                    ready[0] = True
+                except Exception:
+                    pass
+            if not ready[1]:
+                try:
+                    self.daemon2.get_info()
+                    ready[1] = True
+                except Exception:
+                    pass
+            if all(ready):
+                return True
+            time.sleep(1)
+        raise TimeoutError(f'Daemons not ready after {timeout}s (node1={ready[0]}, node2={ready[1]})')
+
+    # ── Wallet management ─────────────────────────────────────────────────
+
+    def create_wallet(self, name, password=''):
+        """Create a new wallet on the wallet RPC for `name`. Opens if already exists."""
+        w = self._get_wallet(name)
+        try:
+            w.create_wallet(filename=name, password=password, language='English')
+        except Exception:
+            w.open_wallet(filename=name, password=password)
+
+    def open_wallet(self, name, password=''):
+        """Open an existing wallet on the wallet RPC for `name`."""
+        w = self._get_wallet(name)
+        w.open_wallet(filename=name, password=password)
+
+    def open_all_wallets(self, password='', timeout=30):
+        """Open all configured wallets with retry."""
+        results = {}
+        for name in sorted(self.wallets):
+            w = self._get_wallet(name)
+            deadline = time.monotonic() + timeout
+            opened = False
+            while time.monotonic() < deadline:
+                try:
+                    w.rpc.send_json_rpc_request({'method': 'get_version', 'params': {}, 'jsonrpc': '2.0', 'id': '0'})
+                    # RPC ready, try to open
+                    try:
+                        w.open_wallet(filename=name, password=password)
+                    except Exception:
+                        pass  # Already open or doesn't exist
+                    opened = True
+                    break
+                except Exception:
+                    time.sleep(1)
+            results[name] = 'ok' if opened else 'timeout'
+        return results
+
+    def restore_wallet(self, name, address, spendkey, viewkey,
+                       password='', restore_height=0):
+        """Restore a wallet from keys on the wallet RPC for `name`."""
+        w = self._get_wallet(name)
+        w.generate_from_keys(filename=name, address=address,
+                             spendkey=spendkey, viewkey=viewkey,
+                             password=password, restore_height=restore_height)
+
+    def close_wallet(self, name):
+        """Close the wallet file on the RPC for `name`."""
+        w = self._get_wallet(name)
+        w.close_wallet()
+
+    def create_subaddress(self, name, label=''):
+        """Create a new subaddress for wallet `name`."""
+        w = self._get_wallet(name)
+        return w.create_address(label=label)
+
+    # ── Daemon extras ───────────────────────────────────────────────────
+
+    def flush_txpool(self):
+        """Flush the transaction pool."""
+        return self.daemon.flush_txpool()
+
+    def start_mining(self, address, threads=2):
+        """Start mining to a raw address (bypasses wallet lookup)."""
+        return self.daemon.start_mining(address, threads_count=threads)
+
     # ── Oracle (devnet only) ──────────────────────────────────────────────
 
     def get_price(self):
@@ -242,4 +341,33 @@ class ZephyrClient:
         atomic = int(round(float(usd_price) * COIN))
         resp = requests.post(f'{self.oracle_url}/set-price',
                              json={'spot': atomic}, timeout=5)
+        return resp.json()
+
+    def oracle_status(self):
+        """Get full oracle status (spot, MA, mode, etc.)."""
+        resp = requests.get(f'{self.oracle_url}/status', timeout=5)
+        return resp.json()
+
+    def oracle_set_ma(self, usd_price):
+        """Set oracle moving average (USD float)."""
+        atomic = int(round(float(usd_price) * COIN))
+        resp = requests.post(f'{self.oracle_url}/set-ma',
+                             json={'moving_average': atomic}, timeout=5)
+        return resp.json()
+
+    def oracle_set_ma_mode(self, mode, alpha=0.1):
+        """Set oracle MA mode (spot|manual|ema|mirror)."""
+        resp = requests.post(f'{self.oracle_url}/set-ma-mode',
+                             json={'mode': mode, 'ema_alpha': float(alpha)}, timeout=5)
+        return resp.json()
+
+    def oracle_supply_sync(self, mode='sync'):
+        """Enable/disable supply sync mode."""
+        resp = requests.post(f'{self.oracle_url}/set-supply-mode',
+                             json={'mode': mode}, timeout=5)
+        return resp.json()
+
+    def oracle_supply_status(self):
+        """Get supply sync status."""
+        resp = requests.get(f'{self.oracle_url}/supply-status', timeout=5)
         return resp.json()

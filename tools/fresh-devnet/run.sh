@@ -24,7 +24,7 @@ EOF
 }
 
 case "${1:-}" in
-    build)       "$SCRIPT_DIR/commands/build.sh" ;;
+    build)       "$SCRIPT_DIR/commands/build.sh" "${2:-custom}" ;;
     start)       "$SCRIPT_DIR/commands/start.sh" "${2:-}" ;;
     stop)        "$SCRIPT_DIR/commands/stop.sh" ;;
     status)      "$SCRIPT_DIR/commands/status.sh" ;;

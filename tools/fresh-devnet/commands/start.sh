@@ -3,6 +3,13 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "$0")"
 source "$SCRIPT_DIR/../lib/common.sh"
 
+ZEPHYR_CLI="$REPO_ROOT/tools/zephyr-cli/cli"
+
+if [[ ! -x "$ZEPHYR_CLI" ]]; then
+    echo "Error: zephyr-cli not found at $ZEPHYR_CLI"
+    exit 1
+fi
+
 mode="${1:-}"
 
 # If no arg: check for snapshots and show menu
@@ -62,79 +69,20 @@ echo "--- Starting all processes via overmind ---"
 overmind start -D -f "$DATA_DIR/Procfile" -s "$OVERMIND_SOCK"
 sleep 2
 
-# 3. Set initial oracle price
-ZEPHYR_CLI="$REPO_ROOT/tools/zephyr-cli/cli"
+# 3. Run devnet init (sets oracle, creates wallets, mines, runs setup-state, checkpoints)
 echo ""
-echo "--- Setting initial oracle price (\$1.50) ---"
-if [[ -x "$ZEPHYR_CLI" ]]; then
-    "$ZEPHYR_CLI" price 1.50
-else
-    curl -s -X POST "http://127.0.0.1:$ORACLE_PORT/set-price" \
-        -H 'Content-Type: application/json' \
-        -d "{\"spot\": $DEFAULT_SPOT}" > /dev/null
-fi
+echo "--- Running devnet init via CLI ---"
+"$ZEPHYR_CLI" devnet init \
+    --oracle-price 1.50 \
+    --mode "${DEVNET_MODE:-custom}" \
+    --checkpoint-file "$CHECKPOINT_FILE"
 
-# 4. Wait for nodes to be ready
-echo ""
-wait_for_rpc $RPC_PORT1 "node1" 30
-wait_for_rpc $RPC_PORT2 "node2" 30
-wait_for_sync $RPC_PORT1 "node1" 30
-wait_for_sync $RPC_PORT2 "node2" 30
-
-# 5. Wait for wallet-rpc instances
-echo ""
-echo "--- Waiting for wallet-rpc instances ---"
-wait_for_wallet_rpc $GOV_WALLET_RPC_PORT "gov" 15
-wait_for_wallet_rpc $MINER_WALLET_RPC_PORT "miner" 15
-wait_for_wallet_rpc $TEST_WALLET_RPC_PORT "test" 15
-
-# 6. Create/restore wallets via RPC BEFORE mining starts
-#    This ensures the gov wallet starts at height 0 and incrementally scans
-#    all new blocks (including block 1 with the governance output).
-echo ""
-echo "--- Restoring governance wallet from keys ---"
-gov_result=$(rpc_call $GOV_WALLET_RPC_PORT "generate_from_keys" "{
-    \"filename\": \"gov\",
-    \"address\": \"$GOV_ADDRESS\",
-    \"spendkey\": \"$GOV_SPEND_KEY\",
-    \"viewkey\": \"$GOV_VIEW_KEY\",
-    \"password\": \"\",
-    \"restore_height\": 0
-}")
-echo "Gov wallet: $(echo "$gov_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('result',{}).get('address','ERROR'))" 2>/dev/null)"
-
-echo "--- Creating miner wallet ---"
-rpc_call $MINER_WALLET_RPC_PORT "create_wallet" '{"filename":"miner","password":"","language":"English"}' > /dev/null 2>&1 || true
-echo "Miner wallet: $("$ZEPHYR_CLI" address miner 2>/dev/null || echo "UNKNOWN")"
-
-echo "--- Creating test wallet ---"
-rpc_call $TEST_WALLET_RPC_PORT "create_wallet" '{"filename":"test","password":"","language":"English"}' > /dev/null 2>&1 || true
-echo "Test wallet: $("$ZEPHYR_CLI" address test 2>/dev/null || echo "UNKNOWN")"
-
-# 7. Start mining to miner wallet on node1
-echo ""
-echo "--- Starting mining on node1 (2 threads) ---"
-"$ZEPHYR_CLI" mine start --wallet miner --threads 2
-
-# 8. Wait for governance funds to unlock (60 blocks + some margin)
-echo ""
-"$ZEPHYR_CLI" wait 70
-
-# 9. Run state setup
-echo ""
-"$SCRIPT_DIR/setup-state.sh"
-
-# 10. Auto-checkpoint for fast reset later
-echo ""
-echo "--- Saving checkpoint for fast reset ---"
-"$SCRIPT_DIR/checkpoint.sh"
-
-# 11. Auto-save snapshot (overwrite previous "default" if exists)
+# 4. Auto-save snapshot (overwrite previous "default" if exists)
 echo ""
 echo "--- Auto-saving snapshot for fast restore ---"
 rm -f "$SNAPSHOT_DIR/default.tar.gz" "$SNAPSHOT_DIR/default.json"
 "$SCRIPT_DIR/save.sh" "default"
 
-# 12. Print summary
+# 5. Print summary
 echo ""
 "$SCRIPT_DIR/status.sh"

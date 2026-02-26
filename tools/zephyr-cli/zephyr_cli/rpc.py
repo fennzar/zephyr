@@ -3,8 +3,14 @@
 import sys
 import os
 
-# Add upstream python-rpc to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'utils', 'python-rpc'))
+# Add upstream python-rpc to path (repo-relative first, then Docker path)
+for _candidate in [
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'utils', 'python-rpc'),
+    '/opt/python-rpc',
+]:
+    if os.path.isdir(_candidate):
+        sys.path.insert(0, _candidate)
+        break
 
 from framework.wallet import Wallet as _UpstreamWallet
 from framework.daemon import Daemon as _UpstreamDaemon
