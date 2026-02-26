@@ -1,0 +1,32 @@
+# ===========================================
+# Dev Overrides — Port Exposure for zephyr-cli
+# ===========================================
+# Exposes daemon, wallet, and oracle ports to the host
+# so zephyr-cli (running natively) can reach them.
+#
+# Usage:
+#   docker compose -f docker/compose.yml -f docker/compose.dev.yml up -d
+#   docker compose -f docker/compose.yml -f docker/compose.dev.yml --profile init up devnet-init
+
+services:
+  # Oracle shares node1's network namespace, so oracle port is exposed via node1
+  zephyr-node1:
+    ports:
+      - "47767:47767"
+      - "5555:5555"
+
+  zephyr-node2:
+    ports:
+      - "47867:47867"
+
+  wallet-gov:
+    ports:
+      - "48769:48769"
+
+  wallet-miner:
+    ports:
+      - "48767:48767"
+
+  wallet-test:
+    ports:
+      - "48768:48768"

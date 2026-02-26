@@ -1,0 +1,250 @@
+name: zephyr
+
+# Standalone Zephyr devnet — 2 nodes, 3 wallets (gov/miner/test), oracle, init.
+#
+# Usage:
+#   docker compose -f docker/compose.yml up -d
+#   docker compose -f docker/compose.yml --profile init up devnet-init
+#
+# Consumers (e.g. bridge-orch) extend via compose overrides to add:
+#   - Extra wallet containers (bridge, engine, cex)
+#   - Anvil, Redis, Postgres
+#   - Port exposure, Blockscout, etc.
+
+x-zephyr-image: &zephyr-image
+  image: zephyr-devnet
+  build:
+    context: ..
+    dockerfile: docker/zephyr/Dockerfile
+    args:
+      - BIN_DIR=build/devnet/bin
+  restart: unless-stopped
+  networks:
+    - zephyr-net
+
+services:
+  # ── Nodes ──────────────────────────────────────────────────────
+  zephyr-node1:
+    <<: *zephyr-image
+    container_name: zephyr-node1
+    environment:
+      ZEPHYR_MODE: node
+      MONERO_RANDOMX_UMASK: "8"
+    command:
+      - --devnet
+      - --non-interactive
+      - --no-igd
+      - --hide-my-port
+      - --p2p-bind-ip=0.0.0.0
+      - --p2p-bind-port=47766
+      - --rpc-bind-ip=0.0.0.0
+      - --rpc-bind-port=47767
+      - --zmq-rpc-bind-ip=0.0.0.0
+      - --zmq-rpc-bind-port=47768
+      - --add-exclusive-node=zephyr-node2:47866
+      - --fixed-difficulty=1
+      - --data-dir=/data
+      - --log-level=0
+      - --confirm-external-bind
+    volumes:
+      - node1-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:47767/get_info"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  zephyr-node2:
+    <<: *zephyr-image
+    container_name: zephyr-node2
+    environment:
+      ZEPHYR_MODE: node
+      MONERO_RANDOMX_UMASK: "8"
+    command:
+      - --devnet
+      - --non-interactive
+      - --no-igd
+      - --hide-my-port
+      - --p2p-bind-ip=0.0.0.0
+      - --p2p-bind-port=47866
+      - --rpc-bind-ip=0.0.0.0
+      - --rpc-bind-port=47867
+      - --zmq-rpc-bind-ip=0.0.0.0
+      - --zmq-rpc-bind-port=47868
+      - --add-exclusive-node=zephyr-node1:47766
+      - --fixed-difficulty=1
+      - --data-dir=/data
+      - --log-level=0
+      - --confirm-external-bind
+    volumes:
+      - node2-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:47867/get_info"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # ── Wallets ────────────────────────────────────────────────────
+  wallet-gov:
+    <<: *zephyr-image
+    container_name: wallet-gov
+    environment:
+      ZEPHYR_MODE: wallet
+    command:
+      - --daemon-address=zephyr-node1:47767
+      - --rpc-bind-port=48769
+      - --rpc-bind-ip=0.0.0.0
+      - --confirm-external-bind
+      - --wallet-dir=/wallets
+      - --disable-rpc-login
+      - --trusted-daemon
+      - --devnet
+      - --shared-ringdb-dir=/data/ringdb
+    volumes:
+      - wallet-data:/wallets
+      - shared-data:/data
+    depends_on:
+      zephyr-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-X", "POST", "http://127.0.0.1:48769/json_rpc",
+             "-d", '{"jsonrpc":"2.0","id":"0","method":"get_version"}',
+             "-H", "Content-Type: application/json"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  wallet-miner:
+    <<: *zephyr-image
+    container_name: wallet-miner
+    environment:
+      ZEPHYR_MODE: wallet
+    command:
+      - --daemon-address=zephyr-node1:47767
+      - --rpc-bind-port=48767
+      - --rpc-bind-ip=0.0.0.0
+      - --confirm-external-bind
+      - --wallet-dir=/wallets
+      - --disable-rpc-login
+      - --trusted-daemon
+      - --devnet
+      - --shared-ringdb-dir=/data/ringdb
+    volumes:
+      - wallet-data:/wallets
+      - shared-data:/data
+    depends_on:
+      zephyr-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-X", "POST", "http://127.0.0.1:48767/json_rpc",
+             "-d", '{"jsonrpc":"2.0","id":"0","method":"get_version"}',
+             "-H", "Content-Type: application/json"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  wallet-test:
+    <<: *zephyr-image
+    container_name: wallet-test
+    environment:
+      ZEPHYR_MODE: wallet
+    command:
+      - --daemon-address=zephyr-node1:47767
+      - --rpc-bind-port=48768
+      - --rpc-bind-ip=0.0.0.0
+      - --confirm-external-bind
+      - --wallet-dir=/wallets
+      - --disable-rpc-login
+      - --trusted-daemon
+      - --devnet
+      - --shared-ringdb-dir=/data/ringdb
+    volumes:
+      - wallet-data:/wallets
+      - shared-data:/data
+    depends_on:
+      zephyr-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-X", "POST", "http://127.0.0.1:48768/json_rpc",
+             "-d", '{"jsonrpc":"2.0","id":"0","method":"get_version"}',
+             "-H", "Content-Type: application/json"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ── Oracle ─────────────────────────────────────────────────────
+  zephyr-fake-oracle:
+    container_name: zephyr-fake-oracle
+    build:
+      context: ..
+      dockerfile: docker/oracle/Dockerfile
+      args:
+        - ORACLE_PORT=5555
+    restart: unless-stopped
+    # Share network namespace with node1 so daemon reaches oracle at 127.0.0.1:5555
+    network_mode: "service:zephyr-node1"
+    depends_on:
+      zephyr-node1:
+        condition: service_started
+
+  # ── Init (one-shot bootstrap) ──────────────────────────────────
+  devnet-init:
+    container_name: zephyr-devnet-init
+    profiles: ["init"]
+    build:
+      context: ..
+      dockerfile: docker/devnet-init/Dockerfile
+    environment:
+      ORACLE_PRICE: "${ORACLE_PRICE:-2.0}"
+      DEVNET_MODE: "${DEVNET_MODE:-custom}"
+      TARGET_RR: "7.0"
+      ZSD_MINT_LIMIT: "450000"
+      CHECKPOINT_FILE: "/checkpoint/height"
+      MINING_THREADS: "2"
+      # Docker hostname overrides for zephyr-cli
+      ZEPHYR_DAEMON_HOST: "zephyr-node1"
+      ZEPHYR_DAEMON_PORT: "47767"
+      ZEPHYR_ORACLE_HOST: "zephyr-node1"
+      ZEPHYR_ORACLE_PORT: "5555"
+      ZEPHYR_WALLET_GOV_HOST: "wallet-gov"
+      ZEPHYR_WALLET_GOV_PORT: "48769"
+      ZEPHYR_WALLET_MINER_HOST: "wallet-miner"
+      ZEPHYR_WALLET_MINER_PORT: "48767"
+      ZEPHYR_WALLET_TEST_HOST: "wallet-test"
+      ZEPHYR_WALLET_TEST_PORT: "48768"
+    volumes:
+      - checkpoint:/checkpoint
+    networks:
+      - zephyr-net
+    depends_on:
+      zephyr-node1:
+        condition: service_healthy
+      zephyr-node2:
+        condition: service_healthy
+      wallet-gov:
+        condition: service_healthy
+      wallet-miner:
+        condition: service_healthy
+      wallet-test:
+        condition: service_healthy
+
+volumes:
+  node1-data:
+    name: zephyr-node1-data
+  node2-data:
+    name: zephyr-node2-data
+  wallet-data:
+    name: zephyr-wallets
+  shared-data:
+    name: zephyr-shared
+  checkpoint:
+    name: zephyr-checkpoint
+
+networks:
+  zephyr-net:
+    driver: bridge
