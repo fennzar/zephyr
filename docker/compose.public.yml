@@ -1,0 +1,15 @@
+# ===========================================
+# Public Node Overlay — Expose RPC/P2P
+# ===========================================
+# Exposes node1 RPC, P2P, and oracle ports to the host.
+# Used by testnet/prod deployments that need external access.
+#
+# Usage:
+#   docker compose -f docker/compose.yml -f docker/compose.public.yml up -d
+
+services:
+  zephyr-node1:
+    ports:
+      - "47767:47767"   # RPC
+      - "47766:47766"   # P2P
+      - "5555:5555"     # Oracle (shares network namespace)
