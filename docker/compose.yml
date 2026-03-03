@@ -220,6 +220,7 @@ services:
       ZSD_MINT_LIMIT: "450000"
       CHECKPOINT_FILE: "/checkpoint/height"
       MINING_THREADS: "2"
+      WALLETS_ONLY: "${WALLETS_ONLY:-}"
       # Docker hostname overrides for zephyr-cli
       ZEPHYR_DAEMON_HOST: "zephyr-node1"
       ZEPHYR_DAEMON_PORT: "47767"

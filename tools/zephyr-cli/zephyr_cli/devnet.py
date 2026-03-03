@@ -26,7 +26,7 @@ class DevnetInit:
 
     def __init__(self, client, oracle_price=2.0, mining_threads=2,
                  setup_mode='custom', target_rr=7.0, zsd_limit=450000,
-                 checkpoint_file=None):
+                 checkpoint_file=None, wallets_only=False):
         self.client = client
         self.oracle_price = oracle_price
         self.mining_threads = mining_threads
@@ -34,6 +34,7 @@ class DevnetInit:
         self.target_rr = target_rr
         self.zsd_limit = zsd_limit
         self.checkpoint_file = checkpoint_file
+        self.wallets_only = wallets_only
 
     def run(self):
         _log('=========================================')
@@ -45,6 +46,13 @@ class DevnetInit:
         self._wait_for_services()
         self._restore_gov_wallet()
         self._create_wallets()
+
+        if self.wallets_only:
+            _log('=========================================')
+            _log('  Wallets created (--wallets-only mode)')
+            _log('=========================================')
+            return
+
         self._start_mining()
         self._wait_governance_unlock()
         self._run_setup_state()
@@ -226,6 +234,7 @@ def run_devnet_command(client, args):
             target_rr=args.target_rr,
             zsd_limit=args.zsd_limit,
             checkpoint_file=args.checkpoint_file,
+            wallets_only=getattr(args, 'wallets_only', False),
         )
         init.run()
 

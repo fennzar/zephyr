@@ -178,3 +178,29 @@ tags:
 	ctags -R --sort=1 --c++-kinds=+p --fields=+iaS --extra=+q --language-force=C++ src contrib tests/gtest
 
 .PHONY: all cmake-debug debug debug-test debug-all cmake-release release release-test release-all clean tags
+
+# ===========================================
+# Devnet Management
+# ===========================================
+
+DEVNET_SH := tools/devnet.sh
+
+.PHONY: devnet devnet-init devnet-stop devnet-reset devnet-delete devnet-status
+
+devnet:                  ## Start devnet stack (creates wallets, no bootstrap)
+	@$(DEVNET_SH) start
+
+devnet-init:             ## Bootstrap devnet (mine + mint + checkpoint). Self-contained.
+	@$(DEVNET_SH) init
+
+devnet-stop:             ## Stop all devnet processes
+	@$(DEVNET_SH) stop
+
+devnet-reset:            ## Reset to checkpoint, then stop
+	@$(DEVNET_SH) reset
+
+devnet-delete:           ## Delete all devnet data
+	@$(DEVNET_SH) delete
+
+devnet-status:           ## Show devnet health
+	@$(DEVNET_SH) status

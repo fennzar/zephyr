@@ -181,6 +181,8 @@ def build_parser():
     p.add_argument('--zsd-limit', type=int, default=450000)
     p.add_argument('--checkpoint-file', default=None)
     p.add_argument('--mining-threads', type=int, default=2)
+    p.add_argument('--wallets-only', action='store_true', default=False,
+                   help='Only create wallets, skip mining/minting/checkpoint')
 
     p = devnet_sub.add_parser('snapshot', help='Save LMDB snapshot')
     p.add_argument('name', nargs='?', default='default')
