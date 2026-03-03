@@ -11,6 +11,12 @@ name: zephyr
 #   - Anvil, Redis, Postgres
 #   - Port exposure, Blockscout, etc.
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-zephyr-image: &zephyr-image
   image: zephyr-devnet
   build:
@@ -19,6 +25,7 @@ x-zephyr-image: &zephyr-image
     args:
       - BIN_DIR=build/devnet/bin
   restart: unless-stopped
+  logging: *default-logging
   networks:
     - zephyr-net
 
@@ -29,7 +36,7 @@ services:
     container_name: zephyr-node1
     environment:
       ZEPHYR_MODE: node
-      MONERO_RANDOMX_UMASK: "8"
+      MONERO_RANDOMX_UMASK: "${MONERO_RANDOMX_UMASK:-8}"
     command:
       - --devnet
       - --non-interactive
@@ -44,7 +51,7 @@ services:
       - --add-exclusive-node=zephyr-node2:47866
       - --fixed-difficulty=1
       - --data-dir=/data
-      - --log-level=0
+      - --log-level=${ZEPHYR_LOG_LEVEL:-0}
       - --confirm-external-bind
     volumes:
       - node1-data:/data
@@ -60,7 +67,7 @@ services:
     container_name: zephyr-node2
     environment:
       ZEPHYR_MODE: node
-      MONERO_RANDOMX_UMASK: "8"
+      MONERO_RANDOMX_UMASK: "${MONERO_RANDOMX_UMASK:-8}"
     command:
       - --devnet
       - --non-interactive
@@ -75,7 +82,7 @@ services:
       - --add-exclusive-node=zephyr-node1:47766
       - --fixed-difficulty=1
       - --data-dir=/data
-      - --log-level=0
+      - --log-level=${ZEPHYR_LOG_LEVEL:-0}
       - --confirm-external-bind
     volumes:
       - node2-data:/data
@@ -186,11 +193,17 @@ services:
       args:
         - ORACLE_PORT=5555
     restart: unless-stopped
+    logging: *default-logging
     # Share network namespace with node1 so daemon reaches oracle at 127.0.0.1:5555
     network_mode: "service:zephyr-node1"
     depends_on:
       zephyr-node1:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5555/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # ── Init (one-shot bootstrap) ──────────────────────────────────
   devnet-init:
@@ -199,6 +212,7 @@ services:
     build:
       context: ..
       dockerfile: docker/devnet-init/Dockerfile
+    logging: *default-logging
     environment:
       ORACLE_PRICE: "${ORACLE_PRICE:-2.0}"
       DEVNET_MODE: "${DEVNET_MODE:-custom}"
@@ -225,6 +239,8 @@ services:
       zephyr-node1:
         condition: service_healthy
       zephyr-node2:
+        condition: service_healthy
+      zephyr-fake-oracle:
         condition: service_healthy
       wallet-gov:
         condition: service_healthy
