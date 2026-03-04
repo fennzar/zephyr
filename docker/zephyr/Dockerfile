@@ -42,9 +42,9 @@ RUN mkdir -p build/devnet && cd build/devnet \
         $([ "$DEVNET_MODE" = "mirror" ] && echo "-DDEVNET_MIRROR_SUPPLY=ON") \
     && MEM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo) \
     && JOBS=$((MEM_GB / 2)) \
-    && [ "$JOBS" -lt 1 ] && JOBS=1 \
+    && { [ "$JOBS" -lt 1 ] && JOBS=1; true; } \
     && CPU=$(nproc) \
-    && [ "$JOBS" -gt "$CPU" ] && JOBS="$CPU" \
+    && { [ "$JOBS" -gt "$CPU" ] && JOBS="$CPU"; true; } \
     && echo "Building with -j${JOBS} (${MEM_GB}GB RAM, ${CPU} CPUs)" \
     && make -j${JOBS} daemon wallet_rpc_server
 
