@@ -173,7 +173,6 @@ docker_start() {
     echo "=== Starting devnet (Docker) ==="
     echo ""
 
-    _ensure_binaries
     dc up -d
     echo ""
 
@@ -189,8 +188,6 @@ docker_init() {
 
     echo "=== Devnet Init (Docker) — full bootstrap ==="
     echo ""
-
-    _ensure_binaries
 
     # Start services if not running
     if ! dc ps --status running -q zephyr-node1 2>/dev/null | grep -q .; then
@@ -482,7 +479,7 @@ case "$COMMAND" in
     delete)
         if [[ "$DOCKER_MODE" -eq 1 ]]; then docker_delete; else native_delete; fi ;;
     ensure-binaries)
-        _ensure_binaries ;;
+        _ensure_binaries ;;  # native mode only
     status)
         if [[ "$DOCKER_MODE" -eq 1 ]]; then docker_status; else native_status; fi ;;
     *)
