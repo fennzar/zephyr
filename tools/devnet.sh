@@ -75,9 +75,20 @@ genesis_guard() {
 
 # ─── Native mode commands ────────────────────────────────────────────────────
 
+_ensure_binaries() {
+    local bin_dir="$BUILD_DIR/bin"
+    if [ ! -f "$bin_dir/zephyrd" ] || [ ! -f "$bin_dir/zephyr-wallet-rpc" ]; then
+        echo "--- Zephyr devnet binaries not found, building... ---"
+        "$DEVNET_DIR/commands/build.sh" "${DEVNET_MODE:-custom}"
+        echo ""
+    fi
+}
+
 native_start() {
     echo "=== Starting devnet (native) ==="
     echo ""
+
+    _ensure_binaries
 
     # Create data dirs if needed
     mkdir -p "$NODE1_DATA" "$NODE2_DATA" "$WALLET_DIR" "$DATA_DIR/ringdb"
@@ -108,6 +119,7 @@ native_init() {
     echo "=== Devnet Init (native) — full bootstrap ==="
     echo ""
 
+    _ensure_binaries
     genesis_guard
 
     # Start if not already running
@@ -161,6 +173,7 @@ docker_start() {
     echo "=== Starting devnet (Docker) ==="
     echo ""
 
+    _ensure_binaries
     dc up -d
     echo ""
 
@@ -176,6 +189,8 @@ docker_init() {
 
     echo "=== Devnet Init (Docker) — full bootstrap ==="
     echo ""
+
+    _ensure_binaries
 
     # Start services if not running
     if ! dc ps --status running -q zephyr-node1 2>/dev/null | grep -q .; then
