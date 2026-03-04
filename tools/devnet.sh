@@ -456,6 +456,7 @@ Commands:
              --checkpoint HEIGHT Pop to this height (Docker)
              --hard              Restore from LMDB snapshots (Docker)
              --snapshot-dir DIR  Snapshot directory for hard reset (Docker)
+  ensure-binaries  Build devnet binaries if missing
   delete   Delete all data
   status   Show devnet health
 
@@ -480,6 +481,8 @@ case "$COMMAND" in
         if [[ "$DOCKER_MODE" -eq 1 ]]; then docker_reset "$@"; else native_reset "$@"; fi ;;
     delete)
         if [[ "$DOCKER_MODE" -eq 1 ]]; then docker_delete; else native_delete; fi ;;
+    ensure-binaries)
+        _ensure_binaries ;;
     status)
         if [[ "$DOCKER_MODE" -eq 1 ]]; then docker_status; else native_status; fi ;;
     *)
