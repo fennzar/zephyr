@@ -23,7 +23,6 @@ x-zephyr-image: &zephyr-image
     context: ..
     dockerfile: docker/zephyr/Dockerfile
     args:
-      - BUILD_JOBS=${BUILD_JOBS:-1}
       - DEVNET_MODE=${DEVNET_MODE:-custom}
   restart: unless-stopped
   logging: *default-logging

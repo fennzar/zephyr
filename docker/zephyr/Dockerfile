@@ -35,12 +35,18 @@ WORKDIR /src
 COPY . .
 
 ARG DEVNET_MODE=custom
-ARG BUILD_JOBS=1
 
+# Auto-detect safe parallelism: 1 job per 2GB RAM, capped by CPU count
 RUN mkdir -p build/devnet && cd build/devnet \
-    && cmake /src -DCMAKE_BUILD_TYPE=Release \
+    && cmake /src -DCMAKE_BUILD_TYPE=Release -DMANUAL_SUBMODULES=1 \
         $([ "$DEVNET_MODE" = "mirror" ] && echo "-DDEVNET_MIRROR_SUPPLY=ON") \
-    && make -j${BUILD_JOBS} daemon wallet_rpc_server
+    && MEM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo) \
+    && JOBS=$((MEM_GB / 2)) \
+    && [ "$JOBS" -lt 1 ] && JOBS=1 \
+    && CPU=$(nproc) \
+    && [ "$JOBS" -gt "$CPU" ] && JOBS="$CPU" \
+    && echo "Building with -j${JOBS} (${MEM_GB}GB RAM, ${CPU} CPUs)" \
+    && make -j${JOBS} daemon wallet_rpc_server
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM ubuntu:24.04
