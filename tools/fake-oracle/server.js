@@ -309,7 +309,7 @@ function readBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
   if (req.method === 'GET' && url.pathname === '/price/') {
@@ -513,6 +513,24 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
+}
+
+// A throw inside the async handler must never hang the request (the daemon's
+// pricing-record poll would block) or surface as an unhandledRejection — answer
+// 500 and move on.
+const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    console.log(`[${new Date().toISOString()}] Request handler error: ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal error' }));
+    }
+  });
+});
+
+server.on('error', (err) => {
+  console.error(`[${new Date().toISOString()}] Server error: ${err.message} — exiting for restart`);
+  process.exit(1);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
@@ -527,4 +545,45 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  POST /set-supply-mode {"mode": "off|sync"}     - toggle supply sync`);
   console.log(`  GET  /supply-status                            - supply sync state`);
   console.log(`  GET  /status                                   - current config`);
+});
+
+// ─── Self-healing watchdog ───────────────────────────────────────────────────
+// The process can stay alive while its listening socket dies silently — most
+// likely when the shared netns (network_mode: service:zephyr-node1) is recreated
+// on a node1 restart, orphaning the bound socket. The Node process keeps running
+// and never re-listen()s, so the port goes dead but `restart: unless-stopped`
+// (which only fires on process EXIT, never on "unhealthy") never recovers it.
+// This probes our own data path; if we can't reach ourselves, exit so Docker
+// restarts us — the restart re-joins node1's current netns and re-binds the port.
+const WATCHDOG_MS = parseInt(process.env.WATCHDOG_MS || '15000', 10);
+function selfProbe() {
+  const req = http.get({ host: '127.0.0.1', port: PORT, path: '/status', timeout: 5000 }, (res) => {
+    res.resume(); // drain so the socket frees
+    if (res.statusCode !== 200) {
+      console.error(`[${new Date().toISOString()}] Watchdog: /status returned ${res.statusCode} — exiting for restart`);
+      process.exit(1);
+    }
+  });
+  req.on('error', (e) => {
+    console.error(`[${new Date().toISOString()}] Watchdog: self-probe failed (${e.message}) — exiting for restart`);
+    process.exit(1);
+  });
+  req.on('timeout', () => {
+    req.destroy();
+    console.error(`[${new Date().toISOString()}] Watchdog: self-probe timed out — exiting for restart`);
+    process.exit(1);
+  });
+}
+setInterval(selfProbe, WATCHDOG_MS);
+
+// Any fatal that would otherwise leave the process wedged (alive but useless)
+// should exit so Docker can restart a clean instance.
+process.on('uncaughtException', (err) => {
+  console.error(`[${new Date().toISOString()}] uncaughtException: ${err.stack || err.message} — exiting for restart`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  const detail = reason && reason.stack ? reason.stack : reason;
+  console.error(`[${new Date().toISOString()}] unhandledRejection: ${detail} — exiting for restart`);
+  process.exit(1);
 });
