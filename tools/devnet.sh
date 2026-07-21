@@ -307,9 +307,14 @@ _docker_reset_normal() {
     _rescan_all_wallets
     sleep 2
 
-    # 9. Flush txpool
-    echo "Flushing transaction pool..."
-    rpc_other "$RPC_PORT1" "flush_txpool" > /dev/null 2>&1 || true
+    # 9. Flush txpool on BOTH nodes. flush_txpool is a JSON-RPC method (via
+    #    rpc_call → /json_rpc), NOT a raw URI — calling it through rpc_other
+    #    (POST /flush_txpool) 404s silently, which is why popped kept_by_block
+    #    txs never actually cleared. node2 must be flushed too: it's popped
+    #    (step 3) but never restarted, so it retains and re-relays the txs.
+    echo "Flushing transaction pool (both nodes)..."
+    rpc_call "$RPC_PORT1" "flush_txpool" > /dev/null 2>&1 || true
+    rpc_call "$RPC_PORT2" "flush_txpool" > /dev/null 2>&1 || true
 
     # 10. Mine warmup blocks
     echo "Mining warm-up blocks..."
@@ -385,6 +390,14 @@ _docker_reset_hard() {
         rpc_call "$wport" "rescan_blockchain" '{"hard":true}' > /dev/null 2>&1 || echo "  WARNING: Failed to rescan $wname"
     done
     sleep 15
+
+    # 7b. Flush txpool on both nodes. The LMDB snapshot restores the blockchain
+    #     (/data/lmdb) but not the tx pool (poolstate lives outside that dir), so
+    #     any pre-reset pool txs survive the restore. flush_txpool is JSON-RPC
+    #     (rpc_call → /json_rpc), not a raw URI — rpc_other would 404 silently.
+    echo "Flushing transaction pool (both nodes)..."
+    rpc_call "$RPC_PORT1" "flush_txpool" > /dev/null 2>&1 || true
+    rpc_call "$RPC_PORT2" "flush_txpool" > /dev/null 2>&1 || true
 
     # 8. Close base wallets (flush to disk)
     echo "Closing base wallets (flushing to disk)..."
